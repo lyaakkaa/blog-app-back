@@ -62,23 +62,20 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='toggle_favorite')
     def toggle_favorite(self, request, pk=None):
-        user = self.get_object()  # The user whose favorites list we're modifying
+        user = self.get_object()  
         favorite_user_id = request.data.get('favorite_user_id')
 
-        # Check if the favorite_user_id was provided
         if not favorite_user_id:
             return Response({'error': 'You must provide a favorite_user_id.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            favorite_user = User.objects.get(id=favorite_user_id)  # The user being added or removed from favorites
+            favorite_user = User.objects.get(id=favorite_user_id)  
         except User.DoesNotExist:
             return Response({'error': 'The user you are trying to add/remove does not exist.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Ensure the user is not adding/removing themselves
         if user.id == favorite_user.id:
             return Response({'error': 'You cannot add/remove yourself as a favorite.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Toggle the favorite status: if the user is already in favorites, remove them; otherwise, add them
         if favorite_user in user.favorite_users.all():
             user.favorite_users.remove(favorite_user)
             user.save()
@@ -87,6 +84,34 @@ class UserViewSet(viewsets.ModelViewSet):
             user.favorite_users.add(favorite_user)
             user.save()
             return Response({'message': 'User added to favorites successfully.'}, status=status.HTTP_200_OK)
+        
+    @action(detail=False, methods=['post'], url_path='is_favorite')
+    def is_following(self, request):
+        """
+        Check if the logged-in user has the specified user in their favorite list.
+        """
+        user_id = request.data.get('user_id')
+        logged_in_user_id = request.data.get('logged_in_user_id')
+
+        if not user_id or not logged_in_user_id:
+            return Response(
+                {'error': 'Both user_id and logged_in_user_id are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+     
+            logged_in_user = User.objects.get(id=logged_in_user_id)
+            is_following = int(user_id) in logged_in_user.favorite_users.values_list('id', flat=True)
+
+            return Response({'is_following': is_following}, status=status.HTTP_200_OK)
+
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'One or both users not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         
 
     @action(detail=True, methods=['get'], url_path='friends')
