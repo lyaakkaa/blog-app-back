@@ -160,12 +160,36 @@ class PostViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
-        post = self.get_object()
+        post = self.get_object()  
+        user_id = request.data.get('user_id')  
+
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if post.user.id == user.id:
+            return Response(
+                {'error': 'You cannot like your own post.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         post.is_liked = not post.is_liked  
         post.like_count += 1 if post.is_liked else -1  
         post.save()
-        return Response({'like_count': post.like_count, 'is_liked': post.is_liked})
 
+        return Response(
+            {'like_count': post.like_count, 'is_liked': post.is_liked},
+            status=status.HTTP_200_OK
+        )
 
 
 logger = logging.getLogger(__name__)
