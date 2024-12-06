@@ -1,7 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from .models import User, Topic, Post, Message
+from .models import Friend, User, Topic, Post, Message
 from .serializers import UserSerializer, TopicSerializer, PostSerializer, MessageSerializer
 import logging
 from datetime import datetime, timedelta
@@ -12,6 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils.timezone import now
 from django.utils.dateparse import parse_datetime
 from django.utils.dateparse import parse_date
+from django.db import models
+
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -79,11 +81,24 @@ class UserViewSet(viewsets.ModelViewSet):
         if favorite_user in user.favorite_users.all():
             user.favorite_users.remove(favorite_user)
             user.save()
+
+            # Удалить дружбу
+            Friend.objects.filter(
+                models.Q(user1=user, user2=favorite_user) | models.Q(user1=favorite_user, user2=user)
+            ).delete()
+
             return Response({'message': 'User removed from favorites successfully.'}, status=status.HTTP_200_OK)
         else:
             user.favorite_users.add(favorite_user)
             user.save()
+
+            # Создать дружбу, если есть взаимная подписка
+            if user in favorite_user.favorite_users.all():
+                Friend.objects.get_or_create(user1=min(user, favorite_user, key=lambda u: u.id),
+                                            user2=max(user, favorite_user, key=lambda u: u.id))
+
             return Response({'message': 'User added to favorites successfully.'}, status=status.HTTP_200_OK)
+
         
     @action(detail=False, methods=['post'], url_path='is_favorite')
     def is_following(self, request):
@@ -112,17 +127,57 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    @action(detail=True, methods=['post'], url_path='set_friend_name')
+    def set_friend_name(self, request, pk=None):
+        user = self.get_object()
+        friend_id = request.data.get('friend_id')
+        friend_name = request.data.get('friend_name')
+
+        if not friend_id:
+            return Response({'error': 'friend_id and friend_name are required.'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            friend = Friend.objects.get(
+                models.Q(user1=user, user2_id=friend_id) | 
+                models.Q(user2=user, user1_id=friend_id)
+            )
+        except Friend.DoesNotExist:
+            return Response({'error': 'Friendship not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if friend.user1 == user:
+            friend.user1_name_for_user2 = friend_name
+        elif friend.user2 == user:
+            friend.user2_name_for_user1 = friend_name
+
+        friend.save()
+        return Response({'message': 'Friend name updated successfully.'}, status=status.HTTP_200_OK)
+
         
 
     @action(detail=True, methods=['get'], url_path='friends')
     def get_friends(self, request, pk=None):
-        """
-        Возвращает список друзей пользователя (взаимные подписки).
-        """
         user = self.get_object()
-        mutual_favorites = user.favorite_users.filter(favorite_users=user)
-        serializer = UserSerializer(mutual_favorites, many=True, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        friends = Friend.objects.filter(models.Q(user1=user) | models.Q(user2=user)).distinct()
+
+        data = []
+        for friendship in friends:
+            if friendship.user1 == user:
+                friend_data = {
+                    'friend': UserSerializer(friendship.user2, context={'request': request}).data,
+                    'friend_name': friendship.user1_name_for_user2,
+                }
+            else:
+                friend_data = {
+                    'friend': UserSerializer(friendship.user1, context={'request': request}).data,
+                    'friend_name': friendship.user2_name_for_user1,
+                }
+            data.append(friend_data)
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+
     
 
     @action(detail=True, methods=['get'], url_path='get_statistic')

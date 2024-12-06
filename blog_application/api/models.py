@@ -44,3 +44,26 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.sender.person_name} -> {self.receiver.person_name}: {self.text}"
+    
+
+
+class Friend(models.Model):
+    user1 = models.ForeignKey('User', related_name='friends_with_user1', on_delete=models.CASCADE)
+    user2 = models.ForeignKey('User', related_name='friends_with_user2', on_delete=models.CASCADE)
+    user1_name_for_user2 = models.CharField(max_length=100, null=True, blank=True)
+    user2_name_for_user1 = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user1', 'user2'], name='unique_friendship')
+        ]
+
+    def save(self, *args, **kwargs):
+        # Ensure user1 has the smaller ID
+        if self.user1.id > self.user2.id:
+            self.user1, self.user2 = self.user2, self.user1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Friendship: {self.user1.person_name} & {self.user2.person_name}"

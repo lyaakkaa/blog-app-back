@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Topic, Post, Message
+from .models import Friend, User, Topic, Post, Message
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -46,3 +46,12 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'sender', 'receiver', 'text', 'timestamp', 'is_bot_response']
+
+
+class FriendSerializer(serializers.ModelSerializer):
+    user1 = UserSerializer()
+    user2 = UserSerializer()
+
+    class Meta:
+        model = Friend
+        fields = ['user1', 'user2', 'user1_name_for_user2', 'user2_name_for_user1', 'created_at']
