@@ -47,17 +47,25 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def update(self, request, *args, **kwargs):
-        user = self.get_object()  # This retrieves the user by the ID provided in the URL (e.g., /api/users/1/)
-
-        # Proceed with the update for the user with the given ID in the URL
-        partial = kwargs.pop('partial', False)  # Handles PATCH for partial updates
+        user = self.get_object()
+        partial = kwargs.pop('partial', False) 
         serializer = self.get_serializer(user, data=request.data, partial=partial)
 
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
+
+            response_data = serializer.data
+            response_data['favorite_users'] = UserSerializer(
+                user.favorite_users.all(),
+                many=True,
+                context={'request': request}
+            ).data
+
+            return Response(response_data, status=status.HTTP_200_OK)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 
     def partial_update(self, request, *args, **kwargs):
         return self.update(request, *args, partial=True)
